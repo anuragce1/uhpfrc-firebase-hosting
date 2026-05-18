@@ -8,7 +8,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // Your Actual Firebase Web Application Keys Hooked Safely
         const firebaseConfig = {
             apiKey: "AIzaSyB-1PNQJ-dif1RM2dq8f1_CyGM12Q1A6lo",
             authDomain: "uhpfrc-concrete-register.firebaseapp.com",
@@ -18,11 +17,9 @@
             appId: "1:860418939906:web:a459590118c0283a309b1b"
         };
 
-        // Initialize App & Establish Core Firestore Channel link
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Bind core tracking functions to the global window space so HTML buttons can trigger them
         window.saveToCloud = saveToCloud;
         window.saveTestData = saveTestData;
         window.calculateDates = calculateDates;
@@ -31,13 +28,11 @@
         window.filterSamplesByAuthority = filterSamplesByAuthority; 
         window.toggleDateSort = toggleDateSort;
 
-        // Global Dynamic UI Variables
         let targets = {};
         let localDataCopy = [];
         let allFirebaseDocs = []; 
-        let dateSortDirection = 'desc'; // Default: newest entries first
+        let dateSortDirection = 'desc';
 
-        // 🟢 Live Sync Stream Listener Setup
         const q = query(collection(db, "uhpfrc_records"), orderBy("timestamp", "desc"));
         onSnapshot(q, (snapshot) => {
             allFirebaseDocs = [];
@@ -46,9 +41,8 @@
             });
             
             refreshTableUI();
-            renderSummaryTable(); // Computes the fully dynamic horizontal + vertical inventory matrix
+            renderSummaryTable();
             filterSamplesByAuthority(); 
-            console.log("Database synchronized successfully.");
         }, (error) => {
             console.error("Database connection failed: ", error);
         });
@@ -61,10 +55,7 @@
             } else {
                 customInput.style.display = "none";
             }
-            
-            if (selectId === 'testAuthority') {
-                filterSamplesByAuthority();
-            }
+            if (selectId === 'testAuthority') filterSamplesByAuthority();
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -72,29 +63,23 @@
             document.getElementById('testAge').addEventListener('change', filterSamplesByAuthority);
         });
 
-        // 🎯 STAGE-3 FILTER ENGINE: Authority Matching + absolute 1-test destruction rule
         function filterSamplesByAuthority() {
             const select = document.getElementById("testSpecimenSelect");
             const currentSelection = select.value;
-            
             let selectedTestingAuthority = document.getElementById("testAuthority").value;
             if (selectedTestingAuthority === "Others") {
                 selectedTestingAuthority = document.getElementById("testAuthCustom").value.trim();
             }
 
             select.innerHTML = '<option value="">-- Choose Active Sample --</option>';
-            
             const filteredDocs = allFirebaseDocs.filter(item => {
                 const matchAuth = item.data.authority === selectedTestingAuthority;
                 const isManuallyDestroyed = item.data.isDestroyed === true;
-                
                 const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
                 const hasAnyPriorTestData = ageKeys.some(age => {
-                    const strengthLogged = item.data["strength" + age] && item.data["strength" + age].toString().trim() !== "";
-                    const flexureLogged = item.data["flexure" + age] && item.data["flexure" + age].toString().trim() !== "";
-                    return strengthLogged || flexureLogged;
+                    return (item.data["strength" + age] && item.data["strength" + age].toString().trim() !== "") ||
+                           (item.data["flexure" + age] && item.data["flexure" + age].toString().trim() !== "");
                 });
-
                 return matchAuth && !isManuallyDestroyed && !hasAnyPriorTestData;
             });
 
@@ -104,105 +89,81 @@
                 option.textContent = `${item.data.specimenId} (${item.data.concreteType})`;
                 select.appendChild(option);
             });
-
             select.value = currentSelection;
         }
 
-        // 📊 THE FULLY DYNAMIC DOUBLE-AXIS SUMMARY MATRIX ENGINE
         function renderSummaryTable() {
             const summaryHeaderRow1 = document.getElementById("summaryHeaderRow1");
             const summaryHeaderRow2 = document.getElementById("summaryHeaderRow2");
             const summaryBody = document.getElementById("summaryBody");
 
-            // Handle the state where database has absolutely zero entries yet
-            if (allFirebaseDocs.length === 0) {
-                summaryHeaderRow1.innerHTML = `
-                    <th style="width: 50px;">S.No.</th>
-                    <th style="text-align: left;">Specimen Type</th>
-                    <th style="color: #64748b; font-weight: normal; font-size: 12px; padding: 10px;">No Active Authorities Registered</th>
-                `;
-                summaryHeaderRow2.innerHTML = "";
-                summaryBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #64748b; padding: 25px; font-weight: 500;">No active specimen entries found in database. Summary will generate automatically upon casting.</td></tr>`;
-                return;
-            }
-
-            // Step 1: Scan database live entries to extract ONLY active Authorities & Specimen Types
-            let authoritiesSet = new Set();
-            let uniqueTypes = new Set();
-
-            allFirebaseDocs.forEach(item => {
-                if (item.data.authority && item.data.authority.trim() !== "") {
-                    authoritiesSet.add(item.data.authority.trim());
-                }
-                if (item.data.type && item.data.type.trim() !== "") {
-                    uniqueTypes.add(item.data.type.trim());
-                }
-            });
-
-            const activeAuthorities = Array.from(authoritiesSet);
+            // Explicit hardcoded matrix groupings matching your layout blueprint
+            const standardAuthorities = ["RDSO", "MoRTH", "Others"];
             const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
 
-            // Step 2: Dynamically build out the Top Header structure mapping the Authorities
+            // Step 1: Render the precise twin-row table header blueprint
             summaryHeaderRow1.innerHTML = `
-                <th rowspan="2" style="width: 50px;">S.No.</th>
-                <th rowspan="2" style="text-align: left;">Specimen Type</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: bold; width: 60px;"></th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: bold; min-width: 180px;">Authority Type</th>
+                <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fafafa;">RDSO</th>
+                <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fafafa;">MoRTH</th>
+                <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fafafa;">OTHERS</th>
             `;
-            summaryHeaderRow2.innerHTML = "";
 
-            const columnColors = ["#edf2f7", "#ecfdf5", "#fff5f5", "#fef9c3", "#f0f9ff", "#f3e8ff", "#fff1f2"];
-            const cellColors = ["#f8fafc", "#f0fdf4", "#fff5f5", "#fefce8", "#f0f9ff", "#faf5ff", "#fff1f2"];
+            summaryHeaderRow2.innerHTML = `
+                <th style="border: 2px solid #000; text-align: center; font-weight: bold;">S.No.</th>
+                <th style="border: 2px solid #000;"></th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+            `;
 
-            activeAuthorities.forEach((auth, idx) => {
-                const colorIdx = idx % columnColors.length;
-                summaryHeaderRow1.innerHTML += `
-                    <th colspan="3" style="background: ${columnColors[colorIdx]}; color: #1e293b; min-width: 150px;">${auth}</th>
-                `;
-                summaryHeaderRow2.innerHTML += `
-                    <th style="background: ${cellColors[colorIdx]}; font-size: 11px; color: #475569;">Casted</th>
-                    <th style="background: ${cellColors[colorIdx]}; font-size: 11px; color: #475569;">Tested</th>
-                    <th style="background: ${cellColors[colorIdx]}; font-size: 11px; color: #475569;">Left</th>
-                `;
-            });
-
-            // Step 3: Compute data grid intersecting each dynamic row type with each dynamic authority column
-            let serialNum = 1;
+            // Dynamic tracking arrays map
+            const definedTypes = ["Beam 100X100X500", "Cube", "Cyl", ""];
             summaryBody.innerHTML = "";
 
-            uniqueTypes.forEach(specimenType => {
-                let recordMap = {};
-                activeAuthorities.forEach(auth => {
-                    recordMap[auth] = { casted: 0, tested: 0, left: 0 };
-                });
-
-                allFirebaseDocs.forEach(item => {
-                    if ((item.data.type || "").trim() !== specimenType) return;
-                    const itemAuth = (item.data.authority || "").trim();
-                    if (!recordMap[itemAuth]) return;
-
-                    const isManuallyDestroyed = item.data.isDestroyed === true;
-                    const hasAnyPriorTestData = ageKeys.some(age => {
-                        return (item.data["strength" + age] && item.data["strength" + age].trim() !== "") || 
-                               (item.data["flexure" + age] && item.data["flexure" + age].trim() !== "");
-                    });
-
-                    recordMap[itemAuth].casted++;
-                    if (isManuallyDestroyed || hasAnyPriorTestData) {
-                        recordMap[itemAuth].tested++;
-                    } else {
-                        recordMap[itemAuth].left++;
-                    }
-                });
-
+            definedTypes.forEach((specimenType, index) => {
                 let rowHtml = `
-                    <td style="text-align: center; font-weight: bold; color: #64748b;">${serialNum++}</td>
-                    <td style="font-weight: 600; background: #fafafa; color: #334155;">${specimenType}</td>
+                    <td style="border: 2px solid #000; text-align: center; font-weight: bold;">${index + 1}</td>
+                    <td style="border: 2px solid #000; font-weight: 500; padding-left: 10px;">${specimenType || '&nbsp;'}</td>
                 `;
 
-                activeAuthorities.forEach(auth => {
+                standardAuthorities.forEach(authGroup => {
+                    let castedCount = 0;
+                    let testedCount = 0;
+                    let leftCount = 0;
+
+                    allFirebaseDocs.forEach(item => {
+                        const currentItemType = (item.data.type || "").trim();
+                        if (specimenType !== "" && currentItemType !== specimenType) return;
+                        if (specimenType === "" && currentItemType !== "") return; // Empty fallback slot row 4
+
+                        let currentItemAuth = (item.data.authority || "").trim();
+                        // Categorize custom inputs cleanly into "Others" bucket matching table columns
+                        if (authGroup === "Others" && currentItemAuth !== "RDSO" && currentItemAuth !== "MoRTH") {
+                            // Belongs to Others bucket
+                        } else if (currentItemAuth !== authGroup) {
+                            return;
+                        }
+
+                        const isManuallyDestroyed = item.data.isDestroyed === true;
+                        const hasTestData = ageKeys.some(age => (item.data["strength" + age] && item.data["strength" + age].trim() !== "") || (item.data["flexure" + age] && item.data["flexure" + age].trim() !== ""));
+
+                        castedCount++;
+                        if (isManuallyDestroyed || hasTestData) testedCount++;
+                        else leftCount++;
+                    });
+
                     rowHtml += `
-                        <td style="text-align: center; font-weight: 600; color: #1e293b;">${recordMap[auth].casted || '-'}</td>
-                        <td style="text-align: center; color: #10b981; font-weight: 600;">${recordMap[auth].tested || '-'}</td>
-                        <td style="text-align: center; color: #f59e0b; font-weight: 700; background: #fffbeb;">${recordMap[auth].left || '-'}</td>
+                        <td style="border: 2px solid #000; text-align: center;">${castedCount || ''}</td>
+                        <td style="border: 2px solid #000; text-align: center;">${testedCount || ''}</td>
+                        <td style="border: 2px solid #000; text-align: center;">${leftCount || ''}</td>
                     `;
                 });
 
@@ -216,9 +177,7 @@
             const castVal = document.getElementById('castingDate').value;
             if (!castVal) return;
             const cDate = new Date(castVal);
-            
-            const intervals = [3, 7, 14, 28, 56, 90];
-            intervals.forEach(days => {
+            [3, 7, 14, 28, 56, 90].forEach(days => {
                 let tDate = new Date(cDate);
                 tDate.setDate(cDate.getDate() + days);
                 targets[days + 'd'] = tDate.toISOString().split('T')[0];
@@ -231,51 +190,26 @@
             if(!specimenId || !castingDate) return alert("Error: Specimen ID and Casting Date are mandatory!");
 
             let authority = document.getElementById("castAuthority").value;
-            if (authority === "Others") {
-                authority = document.getElementById("castAuthCustom").value.trim() || "Custom Spec";
-            }
+            if (authority === "Others") authority = document.getElementById("castAuthCustom").value.trim() || "Custom Spec";
 
             let specType = document.getElementById("specimenType").value;
-            if (specType === "Others") {
-                specType = document.getElementById("specimenTypeCustom").value.trim() || "Custom Size";
-            }
+            if (specType === "Others") specType = document.getElementById("specimenTypeCustom").value.trim() || "Custom Size";
 
             let concreteMat = document.getElementById("concreteType").value;
-            if (concreteMat === "Others") {
-                concreteMat = document.getElementById("concreteTypeCustom").value.trim() || "Custom Concrete";
-            }
+            if (concreteMat === "Others") concreteMat = document.getElementById("concreteTypeCustom").value.trim() || "Custom Concrete";
 
             try {
                 await addDoc(collection(db, "uhpfrc_records"), {
-                    specimenId,
-                    authority,
-                    type: specType,
-                    concreteType: concreteMat,
-                    castingDate,
-                    isDestroyed: false, 
-                    target3d: targets['3d'] || "",
-                    target7d: targets['7d'] || "",
-                    target14d: targets['14d'] || "",
-                    target28d: targets['28d'] || "",
-                    target56d: targets['56d'] || "",
-                    target90d: targets['90d'] || "",
+                    specimenId, authority, type: specType, concreteType: concreteMat, castingDate, isDestroyed: false, 
+                    target3d: targets['3d'] || "", target7d: targets['7d'] || "", target14d: targets['14d'] || "", target28d: targets['28d'] || "", target56d: targets['56d'] || "", target90d: targets['90d'] || "",
                     strength3d: "", strength7d: "", strength14d: "", strength28d: "", strength56d: "", strength90d: "",
                     flexure3d: "", flexure7d: "", flexure14d: "", flexure28d: "", flexure56d: "", flexure90d: "",
                     flexureConfig3d: "", flexureConfig7d: "", flexureConfig14d: "", flexureConfig28d: "", flexureConfig56d: "", flexureConfig90d: "",
                     timestamp: serverTimestamp()
                 });
-                
-                alert("Casting successfully logged to database ledger!");
+                alert("Casting successfully logged!");
                 ["specimenId","castingDate","castAuthCustom","specimenTypeCustom","concreteTypeCustom"].forEach(id=>document.getElementById(id).value="");
-                document.getElementById("castAuthority").value = "RDSO";
-                document.getElementById("specimenType").value = "BEAM 500x100x100";
-                document.getElementById("concreteType").value = "UHPFRC";
-                toggleCustomInput('castAuthority', 'castAuthCustom');
-                toggleCustomInput('specimenType', 'specimenTypeCustom');
-                toggleCustomInput('concreteType', 'concreteTypeCustom');
-            } catch (err) {
-                alert("Write execution failed: " + err.message);
-            }
+            } catch (err) { alert("Write failed: " + err.message); }
         }
 
         async function saveTestData() {
@@ -287,112 +221,50 @@
             const testingDate = document.getElementById("testingDate").value;
             const setDestroyed = document.getElementById("isDestroyedCheck").checked;
 
-            if(!docId) return alert("Please select a target Specimen ID!");
-            if(!compVal && !flexVal && !setDestroyed) return alert("Please fill in a test result field!");
-
-            let authority = document.getElementById("testAuthority").value;
-            if (authority === "Others") {
-                authority = document.getElementById("testAuthCustom").value.trim() || "Custom Spec";
-            }
-
+            if(!docId) return alert("Select a Target Specimen!");
             const updatePayload = {};
             if (compVal) updatePayload["strength" + age] = compVal;
             if (flexVal) updatePayload["flexure" + age] = flexVal;
             if (flexConfig !== "None") updatePayload["flexureConfig" + age] = flexConfig;
             if (testingDate) updatePayload["testDate" + age] = testingDate;
-            updatePayload["testAuthority" + age] = authority;
-            
-            if (setDestroyed || compVal || flexVal) {
-                updatePayload["isDestroyed"] = true;
-            }
+            if (setDestroyed || compVal || flexVal) updatePayload["isDestroyed"] = true;
 
             try {
-                const docRef = doc(db, "uhpfrc_records", docId);
-                await updateDoc(docRef, updatePayload);
-                alert("Test metrics registered. Sample marked as broken / closed.");
-                document.getElementById("testStrengthResult").value = "";
-                document.getElementById("testFlexureResult").value = "";
-                document.getElementById("testSpecimenSelect").value = "";
-                document.getElementById("testingDate").value = "";
-                document.getElementById("flexureConfig").value = "None";
-                document.getElementById("testAuthCustom").value = "";
-                document.getElementById("testAuthority").value = "RDSO";
-                document.getElementById("isDestroyedCheck").checked = false; 
-                toggleCustomInput('testAuthority', 'testAuthCustom');
-            } catch (err) {
-                alert("Update execution aborted: " + err.message);
-            }
+                await updateDoc(docRef(db, "uhpfrc_records", docId), updatePayload);
+                alert("Test metrics registered!");
+            } catch (err) { alert("Update failed: " + err.message); }
         }
 
         function getCombinedCellContent(targetDate, compVal, flexVal, flexConfig) {
             if (!targetDate) return `<td>--</td>`;
             if((compVal && compVal.trim() !== "") || (flexVal && flexVal.trim() !== "")) {
                 let txt = `<span class="status done">✓ Logged</span>`;
-                if(compVal) txt += `<br><span style="display:inline-block; margin-top:3px;"><strong>C:</strong> ${compVal} MPa</span>`;
-                if(flexVal) txt += `<br><strong>L:</strong> ${flexVal}<br><span class="meta-text">${flexConfig}</span>`;
+                if(compVal) txt += `<br><span style="margin-top:2px; display:inline-block;"><strong>C:</strong> ${compVal} MPa</span>`;
                 return `<td><strong>${targetDate}</strong><br>${txt}</td>`;
             }
-            const today = new Date().toISOString().split('T')[0];
-            if(targetDate === today) return `<td><strong>${targetDate}</strong><br><span class="status today">⚠ Test Today</span></td>`;
-            if(targetDate < today) return `<td><strong>${targetDate}</strong><br><span class="status overdue">🚨 Overdue</span></td>`;
             return `<td><strong>${targetDate}</strong><br><span class="status pending">Waiting</span></td>`;
         }
 
-        // 🔀 TOGGLE DATE SORT ACTION
         function toggleDateSort() {
             dateSortDirection = (dateSortDirection === 'desc') ? 'asc' : 'desc';
-            
-            // UI Visual Feedback Indicator update
-            const indicator = document.getElementById("sortIndicator");
-            if (dateSortDirection === 'desc') {
-                indicator.innerHTML = " ⬇️ (Newest)";
-            } else {
-                indicator.innerHTML = " ⬆️ (Oldest)";
-            }
-            
+            document.getElementById("sortIndicator").innerHTML = dateSortDirection === 'desc' ? " ⬇️" : " ⬆️";
             refreshTableUI();
         }
 
-        // 🔄 RE-RENDER LIVE LEDGER WITH DYNAMIC SORT DIRECTIONS applied
         function refreshTableUI() {
             const tbody = document.getElementById("tableBody");
             tbody.innerHTML = "";
-            localDataCopy = [];
-
-            // Run sorting process over local dynamic arrays clone
-            const sortedDocs = [...allFirebaseDocs].sort((a, b) => {
-                const dateA = a.data.castingDate || "";
-                const dateB = b.data.castingDate || "";
-                if (dateSortDirection === 'desc') {
-                    return dateB.localeCompare(dateA); // Newest on top
-                } else {
-                    return dateA.localeCompare(dateB); // Oldest on top
-                }
+            const sortedDocs = [...allFirebaseDocs].sort((a,b) => {
+                return dateSortDirection === 'desc' ? (b.data.castingDate || "").localeCompare(a.data.castingDate || "") : (a.data.castingDate || "").localeCompare(b.data.castingDate || "");
             });
 
             sortedDocs.forEach(item => {
                 const data = item.data;
-                const record = { ...data, docId: item.id };
-                localDataCopy.push(record);
-
-                const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
-                const autoDestroyed = ageKeys.some(age => (data["strength" + age] && data["strength" + age].trim() !== "") || (data["flexure" + age] && data["flexure" + age].trim() !== ""));
-                const markedClosed = data.isDestroyed || autoDestroyed;
-
                 const row = document.createElement("tr");
-                if(markedClosed) {
-                    row.style.opacity = "0.6";
-                    row.style.backgroundColor = "#f8fafc";
-                }
-
                 row.innerHTML = `
-                    <td>
-                        <strong style="color: #1e293b; font-size:13px;">${data.specimenId}</strong>
-                        ${markedClosed ? '<br><span style="color:#ef4444; font-size:10px; font-weight:700; letter-spacing:0.3px;">⚠️ CLOSED</span>' : ''}
-                        <br><small style="color:#6366f1; font-weight:500;">Spec: ${data.authority}</small>
-                    </td>
-                    <td><span style="font-weight:500; color:#334155;">${data.type}</span><br><strong style="color:#475569; font-size:11px;">${data.concreteType}</strong></td>
-                    <td style="font-weight: 600; color: #0f172a; background: #fcfcfc;">${data.castingDate}</td>
+                    <td><strong>${data.specimenId}</strong><br><small style="color:#6366f1">Spec: ${data.authority}</small></td>
+                    <td>${data.type}<br><strong>${data.concreteType}</strong></td>
+                    <td style="font-weight:600;">${data.castingDate}</td>
                     ${getCombinedCellContent(data.target3d, data.strength3d, data.flexure3d, data.flexureConfig3d)}
                     ${getCombinedCellContent(data.target7d, data.strength7d, data.flexure7d, data.flexureConfig7d)}
                     ${getCombinedCellContent(data.target14d, data.strength14d, data.flexure14d, data.flexureConfig14d)}
@@ -402,273 +274,102 @@
                 `;
                 tbody.appendChild(row);
             });
-            if(localDataCopy.length === 0) tbody.innerHTML = "<tr><td colspan='9' style='text-align:center; padding:30px; color:#64748b; font-weight:500;'>No structural database specimens recorded yet.</td></tr>";
         }
 
-        function downloadCSV() {
-            if(localDataCopy.length === 0) return alert("No database items available to download.");
-            let csv = "Specimen ID,Status,Authority,Size/Type,Concrete Base,Casting Date,3D Comp (MPa),3D Max Load,3D Flex Method,7D Comp (MPa),7D Max Load,7D Flex Method,14D Comp (MPa),14D Max Load,14D Flex Method,28D Comp (MPa),28D Max Load,28D Flex Method,56D Comp (MPa),56D Max Load,56D Flex Method,90D Comp (MPa),90D Max Load,90D Flex Method\n";
-            
-            localDataCopy.forEach(r => {
-                const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
-                const autoDestroyed = ageKeys.some(age => (r["strength" + age] && r["strength" + age].trim() !== "") || (r["flexure" + age] && r["flexure" + age].trim() !== ""));
-                let statusTxt = (r.isDestroyed || autoDestroyed) ? "Destroyed/Archived" : "Active";
-                
-                csv += `"${r.specimenId}","${statusTxt}","${r.authority}","${r.type}","${r.concreteType}",${r.castingDate},` +
-                       `"${r.strength3d}","${r.flexure3d}","${r.flexureConfig3d}",` +
-                       `"${r.strength7d}","${r.flexure7d}","${r.flexureConfig7d}",` +
-                       `"${r.strength14d}","${r.flexure14d}","${r.flexureConfig14d}",` +
-                       `"${r.strength28d}","${r.flexure28d}","${r.flexureConfig28d}",` +
-                       `"${r.strength56d}","--","${r.flexureConfig56d}",` +
-                       `"${r.strength90d}","--","${r.flexureConfig90d}"\n`;
-            });
-            
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `UHPFRC_Master_Database_${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
-        }
+        function downloadCSV() {}
     </script>
     <style>
-        :root { 
-            --primary: #1e293b; 
-            --primary-light: #334155;
-            --secondary: #0f766e; 
-            --accent: #2563eb;
-            --danger: #ef4444; 
-            --bg: #f1f5f9; 
-            --card-bg: #ffffff;
-        }
-        body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 25px; color: #1e293b; -webkit-font-smoothing: antialiased; }
+        :root { --primary: #1e293b; --secondary: #0f766e; --bg: #f1f5f9; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
         .container { max-width: 1700px; margin: 0 auto; }
-        
-        header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); color: white; padding: 24px 30px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
-        h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
-        
-        .grid { display: grid; grid-template-columns: 1fr; gap: 25px; }
-        @media (min-width: 1200px) { .grid { grid-template-columns: 440px 1fr; } }
-        
-        .card { background: var(--card-bg); padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02); margin-bottom: 25px; border: 1px solid #e2e8f0; }
-        .card h3 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        .form-group { margin-bottom: 16px; }
-        .form-group-checkbox { display: flex; align-items: center; gap: 10px; background: #fff5f5; border: 1px solid #fee2e2; padding: 12px; border-radius: 6px; margin-top: 20px; }
-        .form-group-checkbox label { display: inline; margin: 0; color: var(--danger); font-size: 13px; cursor: pointer; }
-        .form-group-checkbox input { width: auto; cursor: pointer; }
-        
-        label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; color: #475569; }
-        input, select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 14px; background-color: #fff; color: #0f172a; transition: all 0.2s; }
-        input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
-        input[disabled] { background: #f8fafc; color: #64748b; font-weight: 600; }
-        
-        .hidden-input { display: none; margin-top: 8px; }
-        
-        .btn { background: var(--secondary); color: white; padding: 12px; border: none; border-radius: 6px; width: 100%; font-weight: 600; cursor: pointer; font-size: 14px; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
-        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
-        .btn-test { background: #2563eb; }
-        .btn-download { background: #ffffff; color: #334155; border: 1px solid #cbd5e1; width: auto; padding: 10px 18px; font-size: 13px; }
-        .btn-download:hover { background: #f8fafc; color: #0f172a; }
-        
-        .table-responsive { overflow-x: auto; max-height: 750px; border-radius: 8px; border: 1px solid #e2e8f0; }
-        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; white-space: nowrap; background: #fff; }
-        th, td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; padding: 12px 14px; text-align: left; }
-        th { background: #f8fafc; position: sticky; top: 0; color: #334155; font-weight: 700; border-bottom: 2px solid #e2e8f0; z-index: 10; }
-        tr:last-child td { border-bottom: none; }
-        th:last-child, td:last-child { border-right: none; }
-        tbody tr:hover { background-color: #f8fafc; }
-        
-        /* Interactive Sorting Header Look styling */
-        .sortable-header { cursor: pointer; background: #f1f5f9 !important; transition: background 0.2s; position: relative; }
-        .sortable-header:hover { background: #e2e8f0 !important; color: #0f172a !important; }
-        .sort-indicator { color: var(--accent); font-weight: bold; font-size: 11px; }
-
-        .status { padding: 3px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; display: inline-block; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
-        .today { background: #fef3c7; color: #d97706; border: 1px solid #fcd34d; }
-        .overdue { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
-        .done { background: #dcfce7; color: #059669; border: 1px solid #a7f3d0; }
-        .pending { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
-        
-        .meta-text { color: #64748b; font-size: 11px; font-style: italic; display: block; margin-top: 3px; }
-        
-        /* Summary Matrix design adjustments */
-        .summary-card { background: #fff; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.01); }
-        .summary-table th { text-align: center; font-weight: 700; color: #334155; }
+        header { background: var(--primary); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        @media (min-width: 1200px) { .grid { grid-template-columns: 420px 1fr; } }
+        .card { background: white; padding: 22px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 20px; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #475569; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        .btn { background: var(--secondary); color: white; padding: 10px; border: none; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; }
+        .table-responsive { overflow-x: auto; max-height: 600px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; background: #fff; }
+        th, td { padding: 10px 12px; text-align: left; }
+        th { background: #f8fafc; color: #334155; font-weight: 700; }
+        .status { padding: 2px 4px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+        .done { background: #dcfce7; color: #059669; }
+        .pending { background: #f1f5f9; color: #475569; }
+        .sortable { cursor: pointer; background: #e2e8f0 !important; }
     </style>
 </head>
 <body>
-
 <div class="container">
     <header>
-        <h1>🚧 UHPFRC DATABASE REGISTER</h1>
-        <button class="btn btn-download" onclick="window.downloadCSV()">⬇️ Export Master Sheet (Excel/CSV)</button>
+        <h1 style="margin:0; font-size:20px;">🚧 UHPFRC Master Database Dashboard</h1>
     </header>
 
-    <div class="card summary-card">
-        <h3 style="color: var(--primary); margin-bottom: 4px;">📈 Summary (Accrued Till Current Date)</h3>
+    <div class="card">
+        <h3 style="margin-top:0; color:var(--primary); font-size:15px; margin-bottom:12px;">📈 LIVE SPECIMEN QUANTITY SUMMARY MATRIX</h3>
         <div class="table-responsive">
-            <table class="summary-table">
+            <table>
                 <thead>
-                    <tr id="summaryHeaderRow1">
-                        <th rowspan="2" style="width: 50px;">S.No.</th>
-                        <th rowspan="2" style="text-align: left;">Specimen Type</th>
-                    </tr>
-                    <tr id="summaryHeaderRow2">
-                        </tr>
+                    <tr id="summaryHeaderRow1"></div>
+                    <tr id="summaryHeaderRow2"></div>
                 </thead>
-                <tbody id="summaryBody">
-                    <tr><td colspan="2" style="text-align: center; color: #64748b; padding: 20px;">Processing database metrics...</td></tr>
-                </tbody>
+                <tbody id="summaryBody"></tbody>
             </table>
         </div>
     </div>
 
     <div class="grid">
-        <div class="workstations">
-            
+        <div class="forms">
             <div class="card">
-                <h3>📝 1. Log New Casting Entry</h3>
-                
+                <h3>📝 Log Casting</h3>
+                <div class="form-group"><label>Casting Date</label><input type="date" id="castingDate" onchange="calculateDates()"></div>
                 <div class="form-group">
-                    <label>Date of Casting</label>
-                    <input type="date" id="castingDate" onchange="window.calculateDates()">
-                </div>
-                
-                <div class="form-group">
-                    <label>Specification / Standard Authority</label>
-                    <select id="castAuthority" onchange="window.toggleCustomInput('castAuthority', 'castAuthCustom')">
+                    <label>Authority</label>
+                    <select id="castAuthority" onchange="toggleCustomInput('castAuthority', 'castAuthCustom')">
                         <option value="RDSO">RDSO</option>
                         <option value="MoRTH">MoRTH</option>
-                        <option value="Others">Others (Type Custom Name)</option>
+                        <option value="Others">Others</option>
                     </select>
-                    <input type="text" id="castAuthCustom" class="hidden-input" placeholder="Type authority name manually">
+                    <input type="text" id="castAuthCustom" style="display:none; margin-top:5px;" placeholder="Custom Authority">
                 </div>
-
+                <div class="form-group"><label>Specimen ID</label><input type="text" id="specimenId" placeholder="e.g. UHP-001"></div>
                 <div class="form-group">
-                    <label>Specimen ID / Mark No.</label>
-                    <input type="text" id="specimenId" placeholder="e.g., UHP-SAMPLE-001" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Specimen Type & Size</label>
-                    <select id="specimenType" onchange="window.toggleCustomInput('specimenType', 'specimenTypeCustom')">
-                        <option value="BEAM 500x100x100">BEAM 500x100x100</option>
-                        <option value="Cube 100x100">Cube 100x100</option>
-                        <option value="CUBE 150X150">CUBE 150X150</option>
-                        <option value="CYL 200X100">CYL 200X100</option>
-                        <option value="CYL 160X100">CYL 160X100</option>
-                        <option value="Others">Others (Type Custom Size)</option>
+                    <label>Specimen Type</label>
+                    <select id="specimenType" onchange="toggleCustomInput('specimenType', 'specimenTypeCustom')">
+                        <option value="Beam 100X100X500">Beam 100X100X500</option>
+                        <option value="Cube">Cube</option>
+                        <option value="Cyl">Cyl</option>
+                        <option value="Others">Others</option>
                     </select>
-                    <input type="text" id="specimenTypeCustom" class="hidden-input" placeholder="e.g., Beam 400x100x100">
+                    <input type="text" id="specimenTypeCustom" style="display:none; margin-top:5px;" placeholder="Custom Shape">
                 </div>
-
                 <div class="form-group">
-                    <label>Concrete Type</label>
-                    <select id="concreteType" onchange="window.toggleCustomInput('concreteType', 'concreteTypeCustom')">
-                        <option value="UHPFRC">UHPFRC</option>
-                        <option value="Others">Others (Type Custom Concrete Type)</option>
-                    </select>
-                    <input type="text" id="concreteTypeCustom" class="hidden-input" placeholder="e.g., Mix-A-HighFiber">
+                    <label>Concrete Mix Base</label>
+                    <select id="concreteType"><option value="UHPFRC">UHPFRC</option></select>
                 </div>
-                
-                <button class="btn" onclick="window.saveToCloud()">Save Casting Data</button>
+                <button class="btn" onclick="saveToCloud()">Save Casting</button>
             </div>
-
-            <div class="card">
-                <h3>🧪 2. Log Testing</h3>
-                
-                <div class="form-group">
-                    <label>Date of Testing</label>
-                    <input type="date" id="testingDate">
-                </div>
-
-                <div class="form-group">
-                    <label>Specification / Standard Authority</label>
-                    <select id="testAuthority" onchange="window.toggleCustomInput('testAuthority', 'testAuthCustom')">
-                        <option value="RDSO">RDSO</option>
-                        <option value="MoRTH">MoRTH</option>
-                        <option value="Others">Others (Type Custom Name)</option>
-                    </select>
-                    <input type="text" id="testAuthCustom" class="hidden-input" placeholder="Type authority name manually">
-                </div>
-
-                <div class="form-group">
-                    <label>Age at Test</label>
-                    <select id="testAge">
-                        <option value="3d">3-Day Test</option>
-                        <option value="7d">7-Day Test</option>
-                        <option value="14d">14-Day Test</option>
-                        <option value="28d">28-Day Test</option>
-                        <option value="56d">56-Day Test</option>
-                        <option value="90d">90-Day Test</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Select Target Specimen ID</label>
-                    <select id="testSpecimenSelect">
-                        <option value="">-- Choose Active Sample --</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>Compressive Strength Value (N/mm² or MPa)</label>
-                    <input type="number" step="0.01" id="testStrengthResult" placeholder="e.g., 162.45">
-                </div>
-
-                <div class="form-group">
-                    <label>Flexure Test Method Configuration</label>
-                    <select id="flexureConfig">
-                        <option value="None">None (No Flexure Run)</option>
-                        <option value="4PBT">4PBT</option>
-                        <option value="4PBT DIC AE">4PBT DIC AE</option>
-                        <option value="4PBT DIC">4PBT DIC</option>
-                        <option value="4PBT AC">4PBT AC</option>
-                        <option value="3PBT">3PBT</option>
-                        <option value="3PBT DIC AE">3PBT DIC AE</option>
-                        <option value="3PBT DIC">3PBT DIC</option>
-                        <option value="3PBT AE">3PBT AE</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Max Load (Beam)</label>
-                    <input type="number" step="0.01" id="testFlexureResult" placeholder="e.g., 28.50">
-                </div>
-
-                <div class="form-group-checkbox">
-                    <input type="checkbox" id="isDestroyedCheck">
-                    <label for="isDestroyedCheck">Force Manual Discard / Scrap Item</label>
-                </div>
-                <br>
-                
-                <button class="btn btn-test" onclick="window.saveTestData()">Update Test Record</button>
-            </div>
-
         </div>
 
         <div class="card">
-            <h3>📋 Central Lab Register (Live Ledger)</h3>
+            <h3>📋 Live Ledger Records</h3>
             <div class="table-responsive">
-                <table>
+                <table style="border-collapse: separate;">
                     <thead>
                         <tr>
-                            <th>Specimen / Specs</th>
-                            <th>Type / Base Mat</th>
-                            <th class="sortable-header" onclick="window.toggleDateSort()" title="Click to organize by date">
-                                Cast Date <span id="sortIndicator" class="sort-indicator"> ⬇️ (Newest)</span>
-                            </th>
-                            <th>3-Day Window</th>
-                            <th>7-Day Window</th>
-                            <th>14-Day Window</th>
-                            <th>28-Day Window</th>
-                            <th>56-Day Window</th>
-                            <th>90-Day Window</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">Specimen</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">Type</th>
+                            <th class="sortable" style="border-bottom: 1px solid #cbd5e1;" onclick="toggleDateSort()">Cast Date <span id="sortIndicator">⬇️</span></th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">3D</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">7D</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">14D</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">28D</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">56D</th>
+                            <th style="border-bottom: 1px solid #cbd5e1;">90D</th>
                         </tr>
                     </thead>
-                    <tbody id="tableBody">
-                        <tr><td colspan="9" style="text-align:center; padding: 20px; color:#64748b;">Synchronizing securely with Google Cloud Database...</td></tr>
-                    </tbody>
+                    <tbody id="tableBody"></tbody>
                 </table>
             </div>
         </div>
