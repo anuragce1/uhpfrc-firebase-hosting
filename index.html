@@ -92,17 +92,20 @@
             select.value = currentSelection;
         }
 
+        // 📈 UPDATED MATRIX: NOW INCLUDES STANDARD AUTHORITY EXPLICITLY
         function renderSummaryTable() {
             const summaryHeaderRow1 = document.getElementById("summaryHeaderRow1");
             const summaryHeaderRow2 = document.getElementById("summaryHeaderRow2");
             const summaryBody = document.getElementById("summaryBody");
 
-            const standardAuthorities = ["RDSO", "MoRTH", "Others"];
+            // Explicit matrix groups including the new Standard layout category
+            const standardAuthorities = ["STANDARD", "RDSO", "MoRTH", "Others"];
             const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
 
             summaryHeaderRow1.innerHTML = `
                 <th style="border: 2px solid #000; text-align: center; font-weight: bold; width: 60px;"></th>
                 <th style="border: 2px solid #000; text-align: center; font-weight: bold; min-width: 180px;">Authority Type</th>
+                <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #f8fafc;">STANDARD</th>
                 <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fafafa;">RDSO</th>
                 <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fafafa;">MoRTH</th>
                 <th colspan="3" style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fafafa;">OTHERS</th>
@@ -111,15 +114,10 @@
             summaryHeaderRow2.innerHTML = `
                 <th style="border: 2px solid #000; text-align: center; font-weight: bold;">S.No.</th>
                 <th style="border: 2px solid #000;"></th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th>
-                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
+                <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Casted</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Tested</th><th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
             `;
 
             const definedTypes = ["Beam 100X100X500", "Cube", "Cyl", ""];
@@ -143,11 +141,13 @@
                             return;
                         }
 
-                        let currentItemAuth = (item.data.authority || "").trim();
-                        if (authGroup === "Others" && currentItemAuth !== "RDSO" && currentItemAuth !== "MoRTH") {
-                            // Match custom variants
-                        } else if (currentItemAuth !== authGroup) {
-                            return;
+                        let currentItemAuth = (item.data.authority || "").toUpperCase().trim();
+                        
+                        if (authGroup === "Others") {
+                            // Elements that don't match any explicit hardcoded labels
+                            if (currentItemAuth === "RDSO" || currentItemAuth === "MORTH" || currentItemAuth === "STANDARD") return;
+                        } else {
+                            if (currentItemAuth !== authGroup) return;
                         }
 
                         const isManuallyDestroyed = item.data.isDestroyed === true;
@@ -225,7 +225,6 @@
             if (flexVal) updatePayload["flexure" + age] = flexVal;
             if (flexConfig !== "None") updatePayload["flexureConfig" + age] = flexConfig;
             
-            // CRITICAL STEP: Store testing execution date strictly down into Firebase
             if (testingDate) {
                 updatePayload["testDate" + age] = testingDate;
             } else {
@@ -286,7 +285,6 @@
             if(sortedDocs.length === 0) tbody.innerHTML = "<tr><td colspan='9' style='text-align:center; padding:20px;'>No logs available.</td></tr>";
         }
 
-        // 📊 FIXED EXCEL/CSV EXPORTER WITH TARGETED RUNTIME EXTRACTIONS
         function downloadCSV() {
             if(allFirebaseDocs.length === 0) return alert("No records available to export.");
             
@@ -304,7 +302,6 @@
                 const autoDestroyed = ageKeys.some(age => (r["strength" + age] && r["strength" + age].trim() !== "") || (r["flexure" + age] && r["flexure" + age].trim() !== ""));
                 let statusTxt = (r.isDestroyed || autoDestroyed) ? "Closed/Destroyed" : "Active/Pending";
                 
-                // Safe string parsing wrapper to prevent formatting breakage
                 const getVal = (val) => { return val ? val.toString().replace(/"/g, '""').trim() : "-"; };
 
                 csv += `"${getVal(r.specimenId)}","${statusTxt}","${getVal(r.authority)}","${getVal(r.type)}","${getVal(r.concreteType)}","${getVal(r.castingDate)}",` +
@@ -326,7 +323,7 @@
     <style>
         :root { --primary: #1e293b; --secondary: #0f766e; --bg: #f1f5f9; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
-        .container { max-width: 1700px; margin: 0 auto; }
+        .container { max-width: 1750px; margin: 0 auto; }
         header { background: var(--primary); color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
         @media (min-width: 1200px) { .grid { grid-template-columns: 420px 1fr; } }
@@ -374,6 +371,7 @@
                 <div class="form-group">
                     <label>Authority</label>
                     <select id="castAuthority" onchange="toggleCustomInput('castAuthority', 'castAuthCustom')">
+                        <option value="STANDARD">STANDARD</option>
                         <option value="RDSO">RDSO</option>
                         <option value="MoRTH">MoRTH</option>
                         <option value="Others">Others</option>
@@ -404,6 +402,7 @@
                 <div class="form-group">
                     <label>Authority</label>
                     <select id="testAuthority" onchange="toggleCustomInput('testAuthority', 'testAuthCustom')">
+                        <option value="STANDARD">STANDARD</option>
                         <option value="RDSO">RDSO</option>
                         <option value="MoRTH">MoRTH</option>
                         <option value="Others">Others</option>
