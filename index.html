@@ -139,15 +139,13 @@
                     allFirebaseDocs.forEach(item => {
                         const currentItemType = (item.data.type || "").trim();
                         if (specimenType !== "" && currentItemType !== specimenType) return;
-                        if (specimenType === "" && currentItemType !== "Beam 100X100X500" && currentItemType !== "Cube" && currentItemType !== "Cyl") {
-                            // Belongs to row 4 custom input group
-                        } else if (specimenType === "" && (currentItemType === "Beam 100X100X500" || currentItemType === "Cube" || currentItemType === "Cyl")) {
+                        if (specimenType === "" && (currentItemType === "Beam 100X100X500" || currentItemType === "Cube" || currentItemType === "Cyl")) {
                             return;
                         }
 
                         let currentItemAuth = (item.data.authority || "").trim();
                         if (authGroup === "Others" && currentItemAuth !== "RDSO" && currentItemAuth !== "MoRTH") {
-                            // Belongs to others column group
+                            // Match custom variants
                         } else if (currentItemAuth !== authGroup) {
                             return;
                         }
@@ -226,7 +224,14 @@
             if (compVal) updatePayload["strength" + age] = compVal;
             if (flexVal) updatePayload["flexure" + age] = flexVal;
             if (flexConfig !== "None") updatePayload["flexureConfig" + age] = flexConfig;
-            if (testingDate) updatePayload["testDate" + age] = testingDate;
+            
+            // CRITICAL STEP: Store testing execution date strictly down into Firebase
+            if (testingDate) {
+                updatePayload["testDate" + age] = testingDate;
+            } else {
+                updatePayload["testDate" + age] = new Date().toISOString().split('T')[0];
+            }
+            
             if (setDestroyed || compVal || flexVal) updatePayload["isDestroyed"] = true;
 
             try {
@@ -281,11 +286,10 @@
             if(sortedDocs.length === 0) tbody.innerHTML = "<tr><td colspan='9' style='text-align:center; padding:20px;'>No logs available.</td></tr>";
         }
 
-        // 📊 EXCEL EXPORTER UPGRADED WITH RUNTIME TESTING DATES
+        // 📊 FIXED EXCEL/CSV EXPORTER WITH TARGETED RUNTIME EXTRACTIONS
         function downloadCSV() {
-            if(allFirebaseDocs.length === 0) return alert("No database items available to download.");
+            if(allFirebaseDocs.length === 0) return alert("No records available to export.");
             
-            // Build the comprehensive row header strings mapping out individual test dates
             let csv = "Specimen ID,Status,Authority,Size/Type,Concrete Base,Casting Date," +
                       "3D Test Date,3D Comp (MPa),3D Max Load,3D Flex Method," +
                       "7D Test Date,7D Comp (MPa),7D Max Load,7D Flex Method," +
@@ -300,27 +304,22 @@
                 const autoDestroyed = ageKeys.some(age => (r["strength" + age] && r["strength" + age].trim() !== "") || (r["flexure" + age] && r["flexure" + age].trim() !== ""));
                 let statusTxt = (r.isDestroyed || autoDestroyed) ? "Closed/Destroyed" : "Active/Pending";
                 
-                // Pull out the actual execution logs or append a simple hyphen placeholder
-                const t3d = r.testDate3d || "-";
-                const t7d = r.testDate7d || "-";
-                const t14d = r.testDate14d || "-";
-                const t28d = r.testDate28d || "-";
-                const t56d = r.testDate56d || "-";
-                const t90d = r.testDate90d || "-";
+                // Safe string parsing wrapper to prevent formatting breakage
+                const getVal = (val) => { return val ? val.toString().replace(/"/g, '""').trim() : "-"; };
 
-                csv += `"${r.specimenId}","${statusTxt}","${r.authority}","${r.type}","${r.concreteType}",${r.castingDate},` +
-                       `"${t3d}","${r.strength3d || '-'}","${r.flexure3d || '-'}","${r.flexureConfig3d || '-'}","` +
-                       `1${t7d}","${r.strength7d || '-'}","${r.flexure7d || '-'}","${r.flexureConfig7d || '-'}","` +
-                       `"${t14d}","${r.strength14d || '-'}","${r.flexure14d || '-'}","${r.flexureConfig14d || '-'}","` +
-                       `"${t28d}","${r.strength28d || '-'}","${r.flexure28d || '-'}","${r.flexureConfig28d || '-'}","` +
-                       `"${t56d}","${r.strength56d || '-'}","${r.flexureConfig56d || '-'}","` +
-                       `"${t90d}","${r.strength90d || '-'}","${r.flexureConfig90d || '-'}"\n`;
+                csv += `"${getVal(r.specimenId)}","${statusTxt}","${getVal(r.authority)}","${getVal(r.type)}","${getVal(r.concreteType)}","${getVal(r.castingDate)}",` +
+                       `"${getVal(r.testDate3d)}","${getVal(r.strength3d)}","${getVal(r.flexure3d)}","${getVal(r.flexureConfig3d)}",` +
+                       `"${getVal(r.testDate7d)}","${getVal(r.strength7d)}","${getVal(r.flexure7d)}","${getVal(r.flexureConfig7d)}",` +
+                       `"${getVal(r.testDate14d)}","${getVal(r.strength14d)}","${getVal(r.flexure14d)}","${getVal(r.flexureConfig14d)}",` +
+                       `"${getVal(r.testDate28d)}","${getVal(r.strength28d)}","${getVal(r.flexure28d)}","${getVal(r.flexureConfig28d)}",` +
+                       `"${getVal(r.testDate56d)}","${getVal(r.strength56d)}","${getVal(r.flexureConfig56d)}",` +
+                       `"${getVal(r.testDate90d)}","${getVal(r.strength90d)}","${getVal(r.flexureConfig90d)}"\n`;
             });
             
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = `UHPFRC_Master_Database_With_Test_Dates_${new Date().toISOString().split('T')[0]}.csv`;
+            link.download = `UHPFRC_Database_Export.csv`;
             link.click();
         }
     </script>
@@ -369,7 +368,6 @@
 
     <div class="grid">
         <div class="forms">
-            
             <div class="card">
                 <h3>📝 Log Casting</h3>
                 <div class="form-group"><label>Casting Date</label><input type="date" id="castingDate" onchange="calculateDates()"></div>
@@ -440,7 +438,6 @@
                 <div style="display:none;"><input type="checkbox" id="isDestroyedCheck"></div>
                 <button class="btn" style="background:#2563eb;" onclick="saveTestData()">Update Test Data</button>
             </div>
-
         </div>
 
         <div class="card">
