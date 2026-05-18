@@ -97,11 +97,9 @@
             const summaryHeaderRow2 = document.getElementById("summaryHeaderRow2");
             const summaryBody = document.getElementById("summaryBody");
 
-            // Explicit hardcoded matrix groupings matching your layout blueprint
             const standardAuthorities = ["RDSO", "MoRTH", "Others"];
             const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
 
-            // Step 1: Render the precise twin-row table header blueprint
             summaryHeaderRow1.innerHTML = `
                 <th style="border: 2px solid #000; text-align: center; font-weight: bold; width: 60px;"></th>
                 <th style="border: 2px solid #000; text-align: center; font-weight: bold; min-width: 180px;">Authority Type</th>
@@ -124,14 +122,13 @@
                 <th style="border: 2px solid #000; text-align: center; font-weight: 500;">Left</th>
             `;
 
-            // Dynamic tracking arrays map
             const definedTypes = ["Beam 100X100X500", "Cube", "Cyl", ""];
             summaryBody.innerHTML = "";
 
             definedTypes.forEach((specimenType, index) => {
                 let rowHtml = `
                     <td style="border: 2px solid #000; text-align: center; font-weight: bold;">${index + 1}</td>
-                    <td style="border: 2px solid #000; font-weight: 500; padding-left: 10px;">${specimenType || '&nbsp;'}</td>
+                    <td style="border: 2px solid #000; font-weight: 500; padding-left: 10px;">${specimenType || 'Custom Entries & Others'}</td>
                 `;
 
                 standardAuthorities.forEach(authGroup => {
@@ -142,12 +139,15 @@
                     allFirebaseDocs.forEach(item => {
                         const currentItemType = (item.data.type || "").trim();
                         if (specimenType !== "" && currentItemType !== specimenType) return;
-                        if (specimenType === "" && currentItemType !== "") return; // Empty fallback slot row 4
+                        if (specimenType === "" && currentItemType !== "Beam 100X100X500" && currentItemType !== "Cube" && currentItemType !== "Cyl") {
+                            // Belongs to row 4 custom input group
+                        } else if (specimenType === "" && (currentItemType === "Beam 100X100X500" || currentItemType === "Cube" || currentItemType === "Cyl")) {
+                            return;
+                        }
 
                         let currentItemAuth = (item.data.authority || "").trim();
-                        // Categorize custom inputs cleanly into "Others" bucket matching table columns
                         if (authGroup === "Others" && currentItemAuth !== "RDSO" && currentItemAuth !== "MoRTH") {
-                            // Belongs to Others bucket
+                            // Belongs to others column group
                         } else if (currentItemAuth !== authGroup) {
                             return;
                         }
@@ -161,9 +161,9 @@
                     });
 
                     rowHtml += `
-                        <td style="border: 2px solid #000; text-align: center;">${castedCount || ''}</td>
-                        <td style="border: 2px solid #000; text-align: center;">${testedCount || ''}</td>
-                        <td style="border: 2px solid #000; text-align: center;">${leftCount || ''}</td>
+                        <td style="border: 2px solid #000; text-align: center;">${castedCount || '-'}</td>
+                        <td style="border: 2px solid #000; text-align: center;">${testedCount || '-'}</td>
+                        <td style="border: 2px solid #000; text-align: center; font-weight: bold; background: #fffdf5;">${leftCount || '-'}</td>
                     `;
                 });
 
@@ -230,8 +230,12 @@
             if (setDestroyed || compVal || flexVal) updatePayload["isDestroyed"] = true;
 
             try {
-                await updateDoc(docRef(db, "uhpfrc_records", docId), updatePayload);
-                alert("Test metrics registered!");
+                const docRef = doc(db, "uhpfrc_records", docId);
+                await updateDoc(docRef, updatePayload);
+                alert("Test metrics registered successfully!");
+                document.getElementById("testStrengthResult").value = "";
+                document.getElementById("testFlexureResult").value = "";
+                document.getElementById("testingDate").value = "";
             } catch (err) { alert("Update failed: " + err.message); }
         }
 
@@ -274,9 +278,51 @@
                 `;
                 tbody.appendChild(row);
             });
+            if(sortedDocs.length === 0) tbody.innerHTML = "<tr><td colspan='9' style='text-align:center; padding:20px;'>No logs available.</td></tr>";
         }
 
-        function downloadCSV() {}
+        // 📊 EXCEL EXPORTER UPGRADED WITH RUNTIME TESTING DATES
+        function downloadCSV() {
+            if(allFirebaseDocs.length === 0) return alert("No database items available to download.");
+            
+            // Build the comprehensive row header strings mapping out individual test dates
+            let csv = "Specimen ID,Status,Authority,Size/Type,Concrete Base,Casting Date," +
+                      "3D Test Date,3D Comp (MPa),3D Max Load,3D Flex Method," +
+                      "7D Test Date,7D Comp (MPa),7D Max Load,7D Flex Method," +
+                      "14D Test Date,14D Comp (MPa),14D Max Load,14D Flex Method," +
+                      "28D Test Date,28D Comp (MPa),28D Max Load,28D Flex Method," +
+                      "56D Test Date,56D Comp (MPa),56D Flex Method," +
+                      "90D Test Date,90D Comp (MPa),90D Flex Method\n";
+            
+            allFirebaseDocs.forEach(item => {
+                const r = item.data;
+                const ageKeys = ['3d', '7d', '14d', '28d', '56d', '90d'];
+                const autoDestroyed = ageKeys.some(age => (r["strength" + age] && r["strength" + age].trim() !== "") || (r["flexure" + age] && r["flexure" + age].trim() !== ""));
+                let statusTxt = (r.isDestroyed || autoDestroyed) ? "Closed/Destroyed" : "Active/Pending";
+                
+                // Pull out the actual execution logs or append a simple hyphen placeholder
+                const t3d = r.testDate3d || "-";
+                const t7d = r.testDate7d || "-";
+                const t14d = r.testDate14d || "-";
+                const t28d = r.testDate28d || "-";
+                const t56d = r.testDate56d || "-";
+                const t90d = r.testDate90d || "-";
+
+                csv += `"${r.specimenId}","${statusTxt}","${r.authority}","${r.type}","${r.concreteType}",${r.castingDate},` +
+                       `"${t3d}","${r.strength3d || '-'}","${r.flexure3d || '-'}","${r.flexureConfig3d || '-'}","` +
+                       `1${t7d}","${r.strength7d || '-'}","${r.flexure7d || '-'}","${r.flexureConfig7d || '-'}","` +
+                       `"${t14d}","${r.strength14d || '-'}","${r.flexure14d || '-'}","${r.flexureConfig14d || '-'}","` +
+                       `"${t28d}","${r.strength28d || '-'}","${r.flexure28d || '-'}","${r.flexureConfig28d || '-'}","` +
+                       `"${t56d}","${r.strength56d || '-'}","${r.flexureConfig56d || '-'}","` +
+                       `"${t90d}","${r.strength90d || '-'}","${r.flexureConfig90d || '-'}"\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `UHPFRC_Master_Database_With_Test_Dates_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
     </script>
     <style>
         :root { --primary: #1e293b; --secondary: #0f766e; --bg: #f1f5f9; }
@@ -289,10 +335,11 @@
         .form-group { margin-bottom: 12px; }
         label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #475569; }
         input, select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
-        .btn { background: var(--secondary); color: white; padding: 10px; border: none; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; }
+        .btn { background: var(--secondary); color: white; padding: 10px; border: none; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 5px; }
+        .btn-download { background: #334155; width: auto; padding: 8px 15px; font-size: 13px; }
         .table-responsive { overflow-x: auto; max-height: 600px; border-radius: 8px; border: 1px solid #cbd5e1; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; background: #fff; }
-        th, td { padding: 10px 12px; text-align: left; }
+        th, td { padding: 10px 12px; text-align: left; border: 1px solid #cbd5e1; }
         th { background: #f8fafc; color: #334155; font-weight: 700; }
         .status { padding: 2px 4px; border-radius: 3px; font-size: 10px; font-weight: bold; }
         .done { background: #dcfce7; color: #059669; }
@@ -304,6 +351,7 @@
 <div class="container">
     <header>
         <h1 style="margin:0; font-size:20px;">🚧 UHPFRC Master Database Dashboard</h1>
+        <button class="btn btn-download" onclick="window.downloadCSV()">⬇️ Export Master Sheet (Excel/CSV)</button>
     </header>
 
     <div class="card">
@@ -311,8 +359,8 @@
         <div class="table-responsive">
             <table>
                 <thead>
-                    <tr id="summaryHeaderRow1"></div>
-                    <tr id="summaryHeaderRow2"></div>
+                    <tr id="summaryHeaderRow1"></tr>
+                    <tr id="summaryHeaderRow2"></tr>
                 </thead>
                 <tbody id="summaryBody"></tbody>
             </table>
@@ -321,6 +369,7 @@
 
     <div class="grid">
         <div class="forms">
+            
             <div class="card">
                 <h3>📝 Log Casting</h3>
                 <div class="form-group"><label>Casting Date</label><input type="date" id="castingDate" onchange="calculateDates()"></div>
@@ -350,23 +399,60 @@
                 </div>
                 <button class="btn" onclick="saveToCloud()">Save Casting</button>
             </div>
+
+            <div class="card">
+                <h3>🧪 Log Testing Metrics</h3>
+                <div class="form-group"><label>Testing Execution Date</label><input type="date" id="testingDate"></div>
+                <div class="form-group">
+                    <label>Authority</label>
+                    <select id="testAuthority" onchange="toggleCustomInput('testAuthority', 'testAuthCustom')">
+                        <option value="RDSO">RDSO</option>
+                        <option value="MoRTH">MoRTH</option>
+                        <option value="Others">Others</option>
+                    </select>
+                    <input type="text" id="testAuthCustom" style="display:none; margin-top:5px;" placeholder="Custom Authority">
+                </div>
+                <div class="form-group">
+                    <label>Age Key</label>
+                    <select id="testAge">
+                        <option value="3d">3-Day</option>
+                        <option value="7d">7-Day</option>
+                        <option value="14d">14-Day</option>
+                        <option value="28d">28-Day</option>
+                        <option value="56d">56-Day</option>
+                        <option value="90d">90-Day</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Select Target ID</label>
+                    <select id="testSpecimenSelect"><option value="">-- Choose Active Sample --</option></select>
+                </div>
+                <div class="form-group"><label>Compressive Strength (MPa)</label><input type="number" step="0.01" id="testStrengthResult"></div>
+                <div class="form-group"><label>Max Load Result</label><input type="number" step="0.01" id="testFlexureResult"></div>
+                <div class="form-group">
+                    <label>Flexure Config</label>
+                    <select id="flexureConfig">
+                        <option value="None">None</option>
+                        <option value="3PBT">3PBT</option>
+                        <option value="4PBT">4PBT</option>
+                    </select>
+                </div>
+                <div style="display:none;"><input type="checkbox" id="isDestroyedCheck"></div>
+                <button class="btn" style="background:#2563eb;" onclick="saveTestData()">Update Test Data</button>
+            </div>
+
         </div>
 
         <div class="card">
             <h3>📋 Live Ledger Records</h3>
             <div class="table-responsive">
-                <table style="border-collapse: separate;">
+                <table>
                     <thead>
                         <tr>
-                            <th style="border-bottom: 1px solid #cbd5e1;">Specimen</th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">Type</th>
-                            <th class="sortable" style="border-bottom: 1px solid #cbd5e1;" onclick="toggleDateSort()">Cast Date <span id="sortIndicator">⬇️</span></th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">3D</th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">7D</th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">14D</th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">28D</th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">56D</th>
-                            <th style="border-bottom: 1px solid #cbd5e1;">90D</th>
+                            <th>Specimen</th>
+                            <th>Type</th>
+                            <th class="sortable" onclick="toggleDateSort()">Cast Date <span id="sortIndicator">⬇️</span></th>
+                            <th>3D</th><th>7D</th><th>14D</th><th>28D</th><th>56D</th><th>90D</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
